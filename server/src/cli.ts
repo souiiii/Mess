@@ -21,6 +21,7 @@ try {
     const accounts = await seedDemo(ctx);
     stdout.write(`Demo data created. See README.md for the development-only password.\n${accounts.map(account => `${account.role}: ${account.email}`).join('\n')}\n`);
   } else if (command === 'admin') {
+    const password = passwordSchema.parse(process.env.ADMIN_PASSWORD);
     const rl = createInterface({ input: stdin, output: stdout });
     let email: string;
     let name: string;
@@ -28,7 +29,6 @@ try {
       email = z.email().max(254).parse(process.env.ADMIN_EMAIL ?? await rl.question('Administrator email: ')).toLowerCase();
       name = z.string().trim().min(1).max(100).parse(process.env.ADMIN_NAME ?? await rl.question('Administrator name: '));
     } finally { rl.close(); }
-    const password = passwordSchema.parse(process.env.ADMIN_PASSWORD);
     const hash = await hashPassword(password);
     transaction(db, () => {
       if (one(db, 'SELECT id FROM users WHERE email=?', email)) throw new Error('That email already exists; no changes were made');

@@ -6,7 +6,8 @@ import pino from 'pino';
 import { pinoHttp } from 'pino-http';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { ZodError } from 'zod';
 import type { Context } from './types.js';
 import { Api } from './api.js';
@@ -64,11 +65,16 @@ export function createApp(ctx: Context) {
   });
   const spec = api.document();
   app.get('/api/openapi.json', (_req, res) => res.json(spec));
+  const swaggerAssets = dirname(createRequire(import.meta.url).resolve('swagger-ui-dist/package.json'));
+  app.use('/api/docs/assets', express.static(swaggerAssets, { index: false, dotfiles: 'deny' }));
+  app.get('/api/docs/init.js', (_req, res) => res.type('application/javascript').send("window.ui = SwaggerUIBundle({url:'/api/openapi.json',dom_id:'#swagger-ui',deepLinking:true,persistAuthorization:false,displayRequestDuration:true});"));
+  app.get('/api/docs', (_req, res) => res.type('html').send('<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>IIIT Mess API Explorer</title><link rel="stylesheet" href="/api/docs/assets/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="/api/docs/assets/swagger-ui-bundle.js"></script><script src="/api/docs/init.js"></script></body></html>'));
   app.use('/api/v1', api.router);
   app.use('/api', (_req, _res, next) => next(new ApiError(404, 'ENDPOINT_NOT_FOUND', 'API endpoint not found')));
   const index = join(ctx.config.staticDir, 'index.html');
   if (ctx.config.production) {
     ensure(existsSync(index), 500, 'BUILD_REQUIRED', 'React build missing. Run npm run build before npm start in production');
+    ensure(!one(ctx.db, "SELECT id FROM users WHERE email LIKE '%@demo.iiit-bh.ac.in' LIMIT 1"), 500, 'DEMO_DATABASE', 'Production requires a fresh database without demo accounts');
     app.use('/assets', express.static(join(ctx.config.staticDir, 'assets'), { immutable: true, maxAge: '1y', fallthrough: false, dotfiles: 'deny' }));
     app.use(express.static(ctx.config.staticDir, { index: false, maxAge: 0, dotfiles: 'deny' }));
     app.get('/{*path}', (req, res, next) => {

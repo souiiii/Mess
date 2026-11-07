@@ -25,8 +25,8 @@ export function userRoutes(api: Api) {
     query: pageSchema.extend({ search: z.string().max(100).default(''), role: z.enum(['STUDENT', 'STAFF', 'MANAGER', 'ADMIN']).optional(), active: z.enum(['true', 'false']).optional() })
   }, ({ query }) => {
     const { page, limit, offset } = pagination(query);
-    const where = "WHERE (name LIKE ? ESCAPE '\' OR email LIKE ? ESCAPE '\' OR roll_number LIKE ? ESCAPE '\') AND (? IS NULL OR role = ?) AND (? IS NULL OR active = ?)";
-    const search = `%${query.search.replace(/[\\%_]/g, '\\$&')}%`;
+    const where = "WHERE (name LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!' OR roll_number LIKE ? ESCAPE '!') AND (? IS NULL OR role = ?) AND (? IS NULL OR active = ?)";
+    const search = `%${query.search.replace(/[!%_]/g, '!$&')}%`;
     const active = query.active === undefined ? null : query.active === 'true' ? 1 : 0;
     const binds = [search, search, search, query.role ?? null, query.role ?? null, active, active];
     return { items: all(ctx.db, `SELECT * FROM users ${where} ORDER BY name, id LIMIT ? OFFSET ?`, ...binds, limit, offset).map(publicUser), total: one(ctx.db, `SELECT count(*) AS n FROM users ${where}`, ...binds)!.n, page, limit };
@@ -71,6 +71,6 @@ export function userRoutes(api: Api) {
   }));
   api.route({ method: 'get', path: '/audit', tag: 'Audit', summary: 'Read the append-only audit trail', roles: ['ADMIN'], query: pageSchema.extend({ action: text(60).optional() }) }, ({ query }) => {
     const { page, limit, offset } = pagination(query);
-    return { items: all(ctx.db, 'SELECT a.*, u.name AS actor_name FROM audit_logs a LEFT JOIN users u ON a.actor_id = u.id WHERE (? IS NULL OR action = ?) ORDER BY created_at DESC, a.id LIMIT ? OFFSET ?', query.action ?? null, query.action ?? null, limit, offset).map(row => ({ ...row, details: JSON.parse(row.details) })), total: one(ctx.db, 'SELECT count(*) AS n FROM audit_logs WHERE (? IS NULL OR action = ?)', query.action ?? null, query.action ?? null)!.n, page, limit };
+    return { items: all(ctx.db, 'SELECT a.*, u.name AS actor_name FROM audit_logs a LEFT JOIN users u ON a.actor_id = u.id WHERE (? IS NULL OR action = ?) ORDER BY a.created_at DESC, a.id LIMIT ? OFFSET ?', query.action ?? null, query.action ?? null, limit, offset).map(row => ({ ...row, details: JSON.parse(row.details) })), total: one(ctx.db, 'SELECT count(*) AS n FROM audit_logs WHERE (? IS NULL OR action = ?)', query.action ?? null, query.action ?? null)!.n, page, limit };
   });
 }

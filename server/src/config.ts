@@ -10,7 +10,8 @@ export function loadConfig(): Config {
     DATABASE_PATH: z.string().min(1).default('./data/mess.sqlite'),
     APP_ORIGIN: z.url().default('http://localhost:5173'),
     TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
-    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'silent']).default('info')
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'silent']).default('info'),
+    PAYMENTS_MODE: z.enum(['FAKE','MANUAL']).default('FAKE')
   }).parse(process.env);
   const origin = new URL(env.APP_ORIGIN);
   if (origin.origin !== env.APP_ORIGIN) throw new Error('APP_ORIGIN must be an origin without a trailing slash or path');
@@ -18,6 +19,6 @@ export function loadConfig(): Config {
   return {
     production: env.NODE_ENV === 'production', port: env.PORT, databasePath: env.DATABASE_PATH,
     appOrigin: env.APP_ORIGIN, trustProxy: env.TRUST_PROXY, logLevel: env.LOG_LEVEL,
-    staticDir: resolve('dist/client')
+    staticDir: resolve('dist/client'), paymentsMode: env.PAYMENTS_MODE
   };
 }

@@ -87,7 +87,7 @@ export function communityRoutes(api: Api) {
     audit(ctx.db, actor(req).id, 'COMPLAINT_REOPENED', 'COMPLAINT', complaint.id, {}, iso(ctx));
     return find(ctx, 'complaints', complaint.id);
   }));
-  api.route({ method: 'get', path: '/announcements', tag: 'Announcements', summary: 'Read current mess notices' }, () => all(ctx.db, "SELECT a.id, a.title, a.body, a.priority, a.expires_at, a.created_at, u.name AS author_name FROM announcements a JOIN users u ON a.created_by=u.id WHERE expires_at>? ORDER BY CASE priority WHEN 'IMPORTANT' THEN 0 ELSE 1 END, created_at DESC LIMIT 100", iso(ctx)));
+  api.route({ method: 'get', path: '/announcements', tag: 'Announcements', summary: 'Read current mess notices' }, () => all(ctx.db, "SELECT a.id, a.title, a.body, a.priority, a.expires_at, a.created_at, u.name AS author_name FROM announcements a JOIN users u ON a.created_by=u.id WHERE a.expires_at>? ORDER BY CASE a.priority WHEN 'IMPORTANT' THEN 0 ELSE 1 END, a.created_at DESC LIMIT 100", iso(ctx)));
   api.route({ method: 'post', path: '/announcements', tag: 'Announcements', summary: 'Publish a mess notice', roles: management, status: 201,
     body: z.object({ title: text(150), body: text(5000), priority: z.enum(['NORMAL','IMPORTANT']), expiresAt: timestampSchema }).strict()
   }, ({ req, body }) => transaction(ctx.db, () => {

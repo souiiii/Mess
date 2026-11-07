@@ -31,6 +31,7 @@ export interface Config {
   trustProxy: number;
   logLevel: string;
   staticDir: string;
+  paymentsMode: 'FAKE' | 'MANUAL';
 }
 declare global {
   namespace Express {

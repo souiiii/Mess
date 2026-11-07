@@ -67,7 +67,8 @@ export function mealRoutes(api: Api) {
     const extraId = id();
     run(ctx.db, 'INSERT INTO extras VALUES (?,?,?,?,?,?)', extraId, meal.id, body.name, body.pricePaise, body.capacity, JSON.stringify(body.allergens));
     audit(ctx.db, actor(req).id, 'EXTRA_CREATED', 'EXTRA', extraId, {}, iso(ctx));
-    return find(ctx, 'extras', extraId);
+    const extra = find(ctx, 'extras', extraId);
+    return { ...extra, allergens: JSON.parse(extra.allergens) };
   }));
   api.route({ method: 'post', path: '/bookings', tag: 'Bookings', summary: 'Book a meal; repeat requests return the same booking', roles: ['STUDENT'], body: z.object({ mealId: uuidSchema }).strict(), status: 201 }, ({ req, body }) => transaction(ctx.db, () => bookMeal(ctx, actor(req).id, body.mealId)));
   api.route({ method: 'post', path: '/bookings/bulk', tag: 'Bookings', summary: 'Atomically book up to 28 meals', roles: ['STUDENT'], body: z.object({ mealIds: z.array(uuidSchema).min(1).max(28).refine(ids => new Set(ids).size === ids.length, 'Meal IDs must be unique') }).strict(), status: 201 }, ({ req, body }) => transaction(ctx.db, () => body.mealIds.map(mealId => bookMeal(ctx, actor(req).id, mealId))));

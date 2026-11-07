@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { OpenAPIRegistry, OpenApiGeneratorV31, extendZodWithOpenApi } from '@asteasolutions/zod-to-openapi';
 import type { Context, Role } from './types.js';
 import { actor, ensure, uuidSchema } from './lib.js';
+import { responseContract } from './contracts.js';
 
 extendZodWithOpenApi(z);
 type Method = 'get' | 'post' | 'patch' | 'delete';
@@ -33,6 +34,8 @@ export class Api {
     const names = [...options.path.matchAll(/:([a-zA-Z]+)/g)].map(match => match[1]!);
     const paramsSchema = names.length ? z.object(Object.fromEntries(names.map(name => [name, uuidSchema]))) : undefined;
     const status = options.status ?? 200;
+    const csvResponse = options.path === '/reports/billing/export';
+    const responseSchema = csvResponse ? undefined : responseContract(options.method, options.path);
     const error = z.object({ error: z.object({ code: z.string(), message: z.string(), details: z.unknown().optional(), requestId: z.string() }) });
     this.registry.registerPath({
       method: options.method, path: `/api/v1${options.path.replace(/:([a-zA-Z]+)/g, '{$1}')}`,
@@ -45,7 +48,7 @@ export class Api {
         ...(options.body ? { body: { required: true, content: { 'application/json': { schema: options.body } } } } : {})
       },
       responses: {
-        [status]: { description: 'Successful result in the data envelope', content: { 'application/json': { schema: z.object({ data: z.unknown() }) } } },
+        [status]: { description: csvResponse ? 'Spreadsheet-safe CSV ledger' : 'Successful result in the data envelope', content: csvResponse ? { 'text/csv': { schema: z.string() } } : { 'application/json': { schema: z.object({ data: responseSchema! }) } } },
         ...Object.fromEntries([400, 401, 403, 404, 409, 422, 429].map(code => [code, { description: ({ 400: 'Business rule or malformed request', 401: 'Authentication required', 403: 'Insufficient permission or invalid CSRF token', 404: 'Record not found', 409: 'State or uniqueness conflict', 422: 'Validation failed', 429: 'Rate limit exceeded' } as Record<number, string>)[code]!, content: { 'application/json': { schema: error } } }]))
       }
     });

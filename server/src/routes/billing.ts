@@ -27,9 +27,16 @@ export function billingRoutes(api: Api) {
     owned(req, invoice.user_id);
     return invoiceView(ctx, invoice);
   });
+  api.route({ method: 'get', path: '/invoices/:id/payment-attempts', tag: 'Billing', summary: 'Read successful and failed fake payment attempts for an invoice', query: pageSchema }, ({ req, params, query }) => {
+    const invoice = find(ctx, 'invoices', params.id!);
+    owned(req, invoice.user_id);
+    const { page, limit, offset } = pagination(query);
+    return { items: all(ctx.db, 'SELECT * FROM payment_attempts WHERE invoice_id=? ORDER BY created_at DESC, id LIMIT ? OFFSET ?', invoice.id, limit, offset), total: one(ctx.db, 'SELECT count(*) AS n FROM payment_attempts WHERE invoice_id=?', invoice.id)!.n, page, limit };
+  });
   api.route({ method: 'post', path: '/invoices/:id/payments', tag: 'Billing', summary: 'Record a verified manual payment with an idempotency key', description: 'This records a payment verified by management. It does not transfer money or verify a UPI transaction automatically.', roles: management, status: 201,
     body: z.object({ amountPaise: money.refine(value => value > 0), method: z.enum(['CASH','BANK_TRANSFER','UPI']), reference: text(100), idempotencyKey: z.string().min(16).max(100).regex(/^[a-zA-Z0-9_-]+$/) }).strict()
   }, ({ req, params, body }) => transaction(ctx.db, () => {
+    ensure(ctx.config.paymentsMode === 'MANUAL', 409, 'MANUAL_PAYMENTS_DISABLED', 'Manual payment recording is disabled while the application uses fake payments');
     const invoice = find(ctx, 'invoices', params.id!);
     const existing = one(ctx.db, 'SELECT * FROM payments WHERE idempotency_key=?', body.idempotencyKey);
     if (existing) {
@@ -42,5 +49,24 @@ export function billingRoutes(api: Api) {
     run(ctx.db, 'INSERT INTO payments VALUES (?,?,?,?,?,?,?,?)', paymentId, invoice.id, body.amountPaise, body.method, body.reference, body.idempotencyKey, actor(req).id, iso(ctx));
     audit(ctx.db, actor(req).id, 'PAYMENT_RECORDED', 'PAYMENT', paymentId, { invoiceId: invoice.id, amountPaise: body.amountPaise, method: body.method }, iso(ctx));
     return { payment: find(ctx, 'payments', paymentId), invoice: invoiceView(ctx, invoice) };
+  }));
+  api.route({ method: 'post', path: '/invoices/:id/fake-payment', tag: 'Billing', summary: 'Simulate a successful or failed payment without moving money', description: 'Available in FAKE payment mode. Students can only simulate payments for their own invoices. Failed attempts do not change the balance. All successful records have method FAKE.', roles: ['STUDENT'], status: 201,
+    body: z.object({ amountPaise: money.refine(value => value > 0), outcome: z.enum(['SUCCESS','FAILURE']), idempotencyKey: z.string().min(16).max(100).regex(/^[a-zA-Z0-9_-]+$/) }).strict()
+  }, ({ req, params, body }) => transaction(ctx.db, () => {
+    ensure(ctx.config.paymentsMode === 'FAKE', 409, 'FAKE_PAYMENTS_DISABLED', 'Simulated payments are disabled');
+    const invoice = find(ctx, 'invoices', params.id!);
+    ensure(invoice.user_id === actor(req).id, 403, 'FORBIDDEN', 'You can only simulate payments for your own invoice');
+    const existing = one(ctx.db, 'SELECT * FROM payment_attempts WHERE idempotency_key=?', body.idempotencyKey);
+    if (existing) {
+      ensure(existing.invoice_id === invoice.id && existing.amount_paise === body.amountPaise && existing.outcome === body.outcome && existing.initiated_by === actor(req).id, 409, 'IDEMPOTENCY_CONFLICT', 'This key was used for a different payment attempt');
+      return { simulated: true, moneyMoved: false, attempt: existing, invoice: invoiceView(ctx, invoice) };
+    }
+    ensure(body.amountPaise <= invoiceView(ctx, invoice).outstanding_paise, 409, 'OVERPAYMENT', 'The simulated payment exceeds the outstanding balance');
+    const attemptId = id();
+    const paymentId = body.outcome === 'SUCCESS' ? id() : null;
+    if (paymentId) run(ctx.db, "INSERT INTO payments VALUES (?,?,?,'FAKE',?,?,?,?)", paymentId, invoice.id, body.amountPaise, `FAKE-${attemptId}`, body.idempotencyKey, actor(req).id, iso(ctx));
+    run(ctx.db, 'INSERT INTO payment_attempts VALUES (?,?,?,?,?,?,?,?)', attemptId, invoice.id, actor(req).id, body.amountPaise, body.outcome, body.idempotencyKey, paymentId, iso(ctx));
+    audit(ctx.db, actor(req).id, `FAKE_PAYMENT_${body.outcome}`, 'PAYMENT_ATTEMPT', attemptId, { invoiceId: invoice.id, amountPaise: body.amountPaise, simulated: true }, iso(ctx));
+    return { simulated: true, moneyMoved: false, attempt: find(ctx, 'payment_attempts', attemptId), invoice: invoiceView(ctx, invoice) };
   }));
 }

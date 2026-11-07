@@ -37,13 +37,13 @@ export function reportRoutes(api: Api) {
     const now = iso(ctx);
     if (user.role === 'STUDENT') {
       const outstanding = one(ctx.db, `SELECT COALESCE(sum(i.total_paise - COALESCE((SELECT sum(p.amount_paise) FROM payments p WHERE p.invoice_id=i.id),0)),0) AS n FROM invoices i WHERE i.user_id=?`, user.id)!.n;
-      return { role: user.role, date, billingMonth: date.slice(0, 7), provisionalBillPaise: invoicePreview(ctx, user.id, date.slice(0, 7)).totalPaise, outstandingPaise: outstanding,
+      return { role: user.role, date, paymentsMode: ctx.config.paymentsMode, billingMonth: date.slice(0, 7), provisionalBillPaise: invoicePreview(ctx, user.id, date.slice(0, 7)).totalPaise, outstandingPaise: outstanding,
         upcomingBookings: all(ctx.db, "SELECT b.id, b.price_paise, m.service_date, m.meal_type, m.title, m.menu, m.starts_at, m.ends_at, m.cutoff_at FROM bookings b JOIN meal_services m ON b.meal_id=m.id WHERE b.user_id=? AND b.status='CONFIRMED' AND m.ends_at>? ORDER BY m.starts_at LIMIT 12", user.id, now).map(row => ({ ...row, menu: JSON.parse(row.menu) })),
         pendingLeaves: one(ctx.db, "SELECT count(*) AS n FROM leave_requests WHERE user_id=? AND status='PENDING'", user.id)!.n,
         openComplaints: one(ctx.db, "SELECT count(*) AS n FROM complaints WHERE user_id=? AND status!='RESOLVED'", user.id)!.n
       };
     }
-    return { role: user.role, date, services: operationReport(ctx, date, date),
+    return { role: user.role, date, paymentsMode: ctx.config.paymentsMode, services: operationReport(ctx, date, date),
       lowStockItems: all(ctx.db, 'SELECT * FROM inventory_items WHERE stock<=low_stock_threshold ORDER BY name LIMIT 20'),
       openComplaints: one(ctx.db, "SELECT count(*) AS n FROM complaints WHERE status!='RESOLVED' AND (?=0 OR category!='BILLING')", Number(user.role === 'STAFF'))!.n,
       ...(management.includes(user.role) ? {
@@ -64,16 +64,20 @@ export function reportRoutes(api: Api) {
     const { start, end } = monthRange(query.month);
     return {
       month: query.month,
+      paymentsMode: ctx.config.paymentsMode,
       invoiceCount: one(ctx.db, 'SELECT count(*) AS n FROM invoices WHERE month=?', query.month)!.n,
       billedPaise: one(ctx.db, 'SELECT COALESCE(sum(total_paise),0) AS n FROM invoices WHERE month=?', query.month)!.n,
       collectedForInvoicesPaise: one(ctx.db, 'SELECT COALESCE(sum(p.amount_paise),0) AS n FROM payments p JOIN invoices i ON p.invoice_id=i.id WHERE i.month=?', query.month)!.n,
-      cashReceivedDuringMonthPaise: one(ctx.db, "SELECT COALESCE(sum(amount_paise),0) AS n FROM payments WHERE date(created_at,'+5 hours','+30 minutes')>=? AND date(created_at,'+5 hours','+30 minutes')<?", start, end)!.n,
+      simulatedCollectionsPaise: one(ctx.db, "SELECT COALESCE(sum(p.amount_paise),0) AS n FROM payments p JOIN invoices i ON p.invoice_id=i.id WHERE i.month=? AND p.method='FAKE'", query.month)!.n,
+      verifiedCollectionsPaise: one(ctx.db, "SELECT COALESCE(sum(p.amount_paise),0) AS n FROM payments p JOIN invoices i ON p.invoice_id=i.id WHERE i.month=? AND p.method!='FAKE'", query.month)!.n,
+      cashReceivedDuringMonthPaise: one(ctx.db, "SELECT COALESCE(sum(amount_paise),0) AS n FROM payments WHERE method!='FAKE' AND date(created_at,'+5 hours','+30 minutes')>=? AND date(created_at,'+5 hours','+30 minutes')<?", start, end)!.n,
+      simulatedReceivedDuringMonthPaise: one(ctx.db, "SELECT COALESCE(sum(amount_paise),0) AS n FROM payments WHERE method='FAKE' AND date(created_at,'+5 hours','+30 minutes')>=? AND date(created_at,'+5 hours','+30 minutes')<?", start, end)!.n,
       procurementCostPaise: one(ctx.db, "SELECT COALESCE(sum(total_cost_paise),0) AS n FROM stock_movements WHERE kind='RECEIVE' AND date(created_at,'+5 hours','+30 minutes')>=? AND date(created_at,'+5 hours','+30 minutes')<?", start, end)!.n,
       outstandingPaise: one(ctx.db, 'SELECT COALESCE(sum(i.total_paise - COALESCE((SELECT sum(p.amount_paise) FROM payments p WHERE p.invoice_id=i.id),0)),0) AS n FROM invoices i WHERE i.month=?', query.month)!.n
     };
   });
   api.route({ method: 'get', path: '/reports/billing/export', tag: 'Reports', summary: 'Download the monthly invoice ledger as a spreadsheet-safe CSV', roles: management, query: z.object({ month: monthSchema }) }, ({ query, res }) => {
-    const rows = all(ctx.db, `SELECT i.id AS invoice_id, u.name, u.roll_number, i.month, i.total_paise, COALESCE((SELECT sum(p.amount_paise) FROM payments p WHERE p.invoice_id=i.id),0) AS paid_paise, i.total_paise-COALESCE((SELECT sum(p.amount_paise) FROM payments p WHERE p.invoice_id=i.id),0) AS outstanding_paise, i.due_on FROM invoices i JOIN users u ON i.user_id=u.id WHERE month=? ORDER BY u.roll_number LIMIT 10000`, query.month);
-    res.type('text/csv').attachment(`mess-billing-${query.month}.csv`).send(csv(rows, ['invoice_id','name','roll_number','month','total_paise','paid_paise','outstanding_paise','due_on']));
+    const rows = all(ctx.db, `SELECT i.id AS invoice_id, u.name, u.roll_number, i.month, i.total_paise, COALESCE((SELECT sum(p.amount_paise) FROM payments p WHERE p.invoice_id=i.id),0) AS paid_paise, COALESCE((SELECT sum(p.amount_paise) FROM payments p WHERE p.invoice_id=i.id AND p.method='FAKE'),0) AS simulated_paid_paise, i.total_paise-COALESCE((SELECT sum(p.amount_paise) FROM payments p WHERE p.invoice_id=i.id),0) AS outstanding_paise, i.due_on FROM invoices i JOIN users u ON i.user_id=u.id WHERE month=? ORDER BY u.roll_number LIMIT 10000`, query.month).map(row => ({ ...row, payments_mode: ctx.config.paymentsMode }));
+    res.type('text/csv').attachment(`mess-billing-${query.month}.csv`).send(csv(rows, ['invoice_id','name','roll_number','month','payments_mode','total_paise','paid_paise','simulated_paid_paise','outstanding_paise','due_on']));
   });
 }

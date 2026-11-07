@@ -3,6 +3,7 @@ import { all, audit, id, one, run, transaction } from './db.js';
 import { hashPassword } from './auth.js';
 import { addDays, iso, today } from './lib.js';
 import { bookMeal } from './services/bookings.js';
+import { issueInvoice } from './services/billing.js';
 
 export const demoPassword = 'MessDemo2026!';
 export async function seedDemo(ctx: Context) {
@@ -19,7 +20,7 @@ export async function seedDemo(ctx: Context) {
     ];
     const users = accounts.map(account => {
       const userId = id();
-      run(ctx.db, 'INSERT INTO users (id,name,email,password_hash,role,roll_number,hostel,room,joined_on,must_change_password,created_at) VALUES (?,?,?,?,?,?,?,?,?,0,?)', userId, account.name, account.email, hash, account.role, account.roll, account.roll ? 'Hostel A' : null, account.roll ? '204' : null, today(ctx), iso(ctx));
+      run(ctx.db, 'INSERT INTO users (id,name,email,password_hash,role,roll_number,hostel,room,joined_on,must_change_password,created_at) VALUES (?,?,?,?,?,?,?,?,?,0,?)', userId, account.name, account.email, hash, account.role, account.roll, account.roll ? 'Hostel A' : null, account.roll ? '204' : null, addDays(today(ctx), -90), iso(ctx));
       return { ...account, id: userId };
     });
     const adminId = users[0]!.id;
@@ -41,6 +42,17 @@ export async function seedDemo(ctx: Context) {
         if (template.type === 'LUNCH') run(ctx.db, 'INSERT INTO extras VALUES (?,?,?,?,?,?)', id(), mealId, 'Extra curd', 1500, 80, '["Milk"]');
         if (day === 1) for (const student of users.filter(user => user.role === 'STUDENT')) bookMeal(ctx, student.id, mealId);
       }
+    }
+    const previousMonth = new Date(`${today(ctx).slice(0, 7)}-01T00:00:00Z`);
+    previousMonth.setUTCMonth(previousMonth.getUTCMonth() - 1);
+    const billingMonth = previousMonth.toISOString().slice(0, 7);
+    const historicalDate = `${billingMonth}-15`;
+    const historicalMealId = id();
+    const historicalStart = `${historicalDate}T06:30:00.000Z`;
+    run(ctx.db, "INSERT INTO meal_services VALUES (?,?,?,?,?,?,'VEG',?,?,?,?,?,'PUBLISHED',?,?)", historicalMealId, historicalDate, 'LUNCH', 'Demo historical lunch', '["Rice","Dalma","Curd"]', '["Milk"]', 6000, 400, historicalStart, `${historicalDate}T08:30:00.000Z`, `${historicalDate}T03:30:00.000Z`, adminId, historicalStart);
+    for (const student of users.filter(user => user.role === 'STUDENT')) {
+      run(ctx.db, "INSERT INTO bookings (id,user_id,meal_id,status,price_paise,created_at,attended_at,attended_by) VALUES (?,?,?,'ATTENDED',6000,?,?,?)", id(), student.id, historicalMealId, `${historicalDate}T02:00:00.000Z`, historicalStart, users[2]!.id);
+      issueInvoice(ctx, student.id, billingMonth, addDays(today(ctx), 7), adminId);
     }
     const supplierId = id();
     run(ctx.db, 'INSERT INTO suppliers VALUES (?,?,?,?)', supplierId, 'Campus Provisions', 'Demo supplier; replace before real use', iso(ctx));

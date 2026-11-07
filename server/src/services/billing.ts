@@ -4,7 +4,7 @@ import { ensure, find, iso, monthRange, today } from '../lib.js';
 
 export function invoicePreview(ctx: Context, userId: string, month: string) {
   const user = find(ctx, 'users', userId);
-  ensure(user.role === 'STUDENT', 400, 'NOT_A_STUDENT', 'Invoices are only issued for student accounts');
+  ensure(user.roll_number, 400, 'NOT_A_STUDENT', 'Invoices are only issued for current or former student accounts');
   const { start, end } = monthRange(month);
   const meals = all(ctx.db, `SELECT b.id AS sourceId, 'MEAL' AS sourceType, m.service_date || ' ' || m.meal_type || ' — ' || m.title AS description, 1 AS quantity, b.price_paise AS unitPricePaise FROM bookings b JOIN meal_services m ON b.meal_id=m.id WHERE b.user_id=? AND b.status!='CANCELLED' AND m.status='PUBLISHED' AND m.service_date>=? AND m.service_date<? ORDER BY m.starts_at`, userId, start, end);
   const extras = all(ctx.db, `SELECT o.id AS sourceId, 'EXTRA' AS sourceType, m.service_date || ' ' || e.name AS description, o.quantity, o.unit_price_paise AS unitPricePaise FROM extra_orders o JOIN bookings b ON o.booking_id=b.id JOIN extras e ON o.extra_id=e.id JOIN meal_services m ON b.meal_id=m.id WHERE b.user_id=? AND o.status!='CANCELLED' AND b.status!='CANCELLED' AND m.status='PUBLISHED' AND m.service_date>=? AND m.service_date<? ORDER BY m.starts_at`, userId, start, end);
@@ -14,7 +14,7 @@ export function invoicePreview(ctx: Context, userId: string, month: string) {
 export function invoiceView(ctx: Context, invoice: Row, withLines = true) {
   const paid = one(ctx.db, 'SELECT COALESCE(sum(amount_paise),0) AS n FROM payments WHERE invoice_id=?', invoice.id)!.n;
   const outstanding = invoice.total_paise - paid;
-  return { ...invoice, paid_paise: paid, outstanding_paise: outstanding, status: outstanding === 0 ? 'PAID' : invoice.due_on < today(ctx) ? 'OVERDUE' : paid > 0 ? 'PARTIALLY_PAID' : 'UNPAID', ...(withLines ? { lines: all(ctx.db, 'SELECT * FROM invoice_lines WHERE invoice_id=? ORDER BY description, id', invoice.id), payments: all(ctx.db, 'SELECT id, amount_paise, method, reference, created_at FROM payments WHERE invoice_id=? ORDER BY created_at', invoice.id) } : {}) };
+  return { ...invoice, payments_mode: ctx.config.paymentsMode, paid_paise: paid, outstanding_paise: outstanding, status: outstanding === 0 ? 'PAID' : invoice.due_on < today(ctx) ? 'OVERDUE' : paid > 0 ? 'PARTIALLY_PAID' : 'UNPAID', ...(withLines ? { lines: all(ctx.db, 'SELECT * FROM invoice_lines WHERE invoice_id=? ORDER BY description, id', invoice.id), payments: all(ctx.db, 'SELECT id, amount_paise, method, reference, created_at FROM payments WHERE invoice_id=? ORDER BY created_at', invoice.id) } : {}) };
 }
 export function issueInvoice(ctx: Context, userId: string, month: string, dueOn: string, actorId: string) {
   const range = monthRange(month);

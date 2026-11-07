@@ -5,7 +5,7 @@ import { openDatabase, run } from './db.js';
 const config = loadConfig();
 const db = openDatabase(config.databasePath);
 const app = createApp({ db, config, now: () => new Date() });
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, config.production ? '0.0.0.0' : '127.0.0.1', () => {
   process.stdout.write(`Mess API ready at http://localhost:${config.port}\n`);
 });
 server.requestTimeout = 30000;

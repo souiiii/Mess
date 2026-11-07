@@ -102,9 +102,15 @@ CREATE TABLE invoice_lines (
 CREATE TABLE payments (
   id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL REFERENCES invoices(id),
   amount_paise INTEGER NOT NULL CHECK(amount_paise > 0),
-  method TEXT NOT NULL CHECK(method IN ('CASH','BANK_TRANSFER','UPI')),
+  method TEXT NOT NULL CHECK(method IN ('CASH','BANK_TRANSFER','UPI','FAKE')),
   reference TEXT NOT NULL UNIQUE, idempotency_key TEXT NOT NULL UNIQUE,
   recorded_by TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE payment_attempts (
+  id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL REFERENCES invoices(id), initiated_by TEXT NOT NULL REFERENCES users(id),
+  amount_paise INTEGER NOT NULL CHECK(amount_paise > 0), outcome TEXT NOT NULL CHECK(outcome IN ('SUCCESS','FAILURE')),
+  idempotency_key TEXT NOT NULL UNIQUE, payment_id TEXT REFERENCES payments(id), created_at TEXT NOT NULL,
+  CHECK((outcome = 'SUCCESS' AND payment_id IS NOT NULL) OR (outcome = 'FAILURE' AND payment_id IS NULL))
 ) STRICT;
 CREATE TABLE suppliers (
   id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, contact TEXT NOT NULL, created_at TEXT NOT NULL
@@ -146,4 +152,6 @@ CREATE TRIGGER immutable_audit_update BEFORE UPDATE ON audit_logs BEGIN SELECT R
 CREATE TRIGGER immutable_audit_delete BEFORE DELETE ON audit_logs BEGIN SELECT RAISE(ABORT, 'Audit logs are immutable'); END;
 CREATE TRIGGER immutable_stock_update BEFORE UPDATE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are immutable'); END;
 CREATE TRIGGER immutable_stock_delete BEFORE DELETE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are immutable'); END;
+CREATE TRIGGER immutable_attempt_update BEFORE UPDATE ON payment_attempts BEGIN SELECT RAISE(ABORT, 'Payment attempts are immutable'); END;
+CREATE TRIGGER immutable_attempt_delete BEFORE DELETE ON payment_attempts BEGIN SELECT RAISE(ABORT, 'Payment attempts are immutable'); END;
 ` }];
