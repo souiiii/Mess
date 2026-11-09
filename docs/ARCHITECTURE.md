@@ -102,6 +102,6 @@ Production requires a built React application, an HTTPS public origin, a fresh d
 
 The integration tests exercise real Express middleware, cookies, SQLite constraints and transactions. Time is injected, allowing exact-cutoff, expiry, month-close and overdue tests without waiting. They include competing HTTP requests for the last meal seat and for a remaining invoice balance. The persistence suite reopens a file database and verifies a restored online backup with `PRAGMA integrity_check`.
 
-The React shell verifies the proxy, health endpoint, login, forced password change, role-aware dashboard and logout. It is not the final product interface.
+The React integration suite (`client/test/workflows.test.tsx`) exercises end-to-end student, staff, manager and administrator workflows—including booking, cancellation, simulated payments, leave requests, menu publication, stock movements, pass check-in, complaints, account provisioning and policy updates—against isolated in-memory Express and SQLite instances.
 
 Primary references: [Node SQLite API](https://nodejs.org/api/sqlite.html), [Express production security](https://expressjs.com/en/advanced/best-practice-security.html), [Zod to OpenAPI](https://github.com/asteasolutions/zod-to-openapi).

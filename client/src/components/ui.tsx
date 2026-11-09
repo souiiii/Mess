@@ -18,6 +18,7 @@ import {
   X,
   AlertCircle,
   Inbox,
+  UtensilsCrossed,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ApiError, refresh } from "../api";
@@ -31,9 +32,11 @@ export function Brand({ light = false }: { light?: boolean }) {
       className={`wordmark ${light ? "light" : ""}`}
       aria-label="The Mess home"
     >
-      <span className="wordmark-the">THE</span>
-      <span>
-        MESS<span className="wordmark-period">.</span>
+      <span className="wordmark-mark" aria-hidden="true">
+        <UtensilsCrossed size={18} strokeWidth={2.2} />
+      </span>
+      <span className="wordmark-text">
+        The Mess<span className="wordmark-period">.</span>
       </span>
     </Link>
   );
@@ -116,13 +119,40 @@ export function SectionHead({
   );
 }
 export function Badge({ status }: { status: string }) {
+  const tone = [
+    "PUBLISHED",
+    "CONFIRMED",
+    "ATTENDED",
+    "APPROVED",
+    "PAID",
+    "SUCCESS",
+    "FULFILLED",
+    "RESOLVED",
+    "ACTIVE",
+    "IN STOCK",
+    "RECORDED",
+    "VEG",
+    "VEGAN",
+    "RECEIVE",
+  ].includes(status)
+    ? "solid badge-success"
+    : [
+          "CANCELLED",
+          "REJECTED",
+          "OVERDUE",
+          "LOW STOCK",
+          "FAILURE",
+          "SUSPENDED",
+          "WASTE",
+          "WITHDRAWN",
+        ].includes(status)
+      ? "badge-danger"
+      : "badge-warning";
   return (
-    <span
-      className={`badge ${["PUBLISHED", "CONFIRMED", "ATTENDED", "APPROVED", "PAID", "SUCCESS", "FULFILLED", "RESOLVED", "ACTIVE"].includes(status) ? "solid" : ""}`}
-    >
-      {["ATTENDED", "PAID", "APPROVED", "SUCCESS"].includes(status) && (
-        <Check size={10} />
-      )}
+    <span className={`badge ${tone}`}>
+      {["ATTENDED", "PAID", "APPROVED", "SUCCESS", "IN STOCK"].includes(
+        status,
+      ) && <Check size={10} />}
       {titleCase(status)}
     </span>
   );

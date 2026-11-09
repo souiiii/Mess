@@ -246,6 +246,8 @@ function OperationsHome() {
   const services = d?.services ?? [];
   const booked = services.reduce((n, meal) => n + meal.booked, 0);
   const attended = services.reduce((n, meal) => n + meal.attended, 0);
+  const pct = booked ? Math.round((attended / booked) * 100) : 0;
+  const filledSegments = Math.round((pct / 100) * 18);
   return (
     <div className="page-enter">
       <PageHead
@@ -265,13 +267,30 @@ function OperationsHome() {
       <Load query={q}>
         <div className="ops-cover">
           <div className="ops-cover-title">
-            <span className="eyebrow">TODAY IN THE MESS</span>
+            <div className="ops-card-head">
+              <span className="eyebrow">TODAY IN THE MESS</span>
+              <span className="ops-rate-pill">{pct}% served</span>
+            </div>
             <strong>{booked.toLocaleString("en-IN")}</strong>
             <h2>
               Meals to make.
               <br />
               People to feed.
             </h2>
+            <div className="ops-segment-bar" aria-hidden="true">
+              {Array.from({ length: 18 }, (_, i) => (
+                <span
+                  key={i}
+                  className={
+                    i < Math.min(6, filledSegments)
+                      ? "seg-dark"
+                      : i < filledSegments
+                        ? "seg-lime"
+                        : "seg-empty"
+                  }
+                />
+              ))}
+            </div>
             <span className="small">
               {attended} served · {services.length} services
             </span>

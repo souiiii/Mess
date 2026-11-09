@@ -19,7 +19,20 @@ try {
     stdout.write('Database migrations applied successfully.\n');
   } else if (command === 'seed') {
     const accounts = await seedDemo(ctx);
-    stdout.write(`Demo data created. See README.md for the development-only password.\n${accounts.map(account => `${account.role}: ${account.email}`).join('\n')}\n`);
+    stdout.write(`Demo data created.\n${accounts.map(account => `${account.role}: ${account.email}`).join('\n')}\n`);
+    if (!process.env.DEMO_PASSWORD) {
+      stdout.write(`Generated demo password (save securely now; not stored in plaintext): ${accounts.password}\n`);
+    }
+  } else if (command === 'demo-init') {
+    const accounts = await seedDemo(ctx, {
+      allowProduction: true,
+      password: process.env.DEMO_PASSWORD || undefined,
+      domain: process.env.DEMO_EMAIL_DOMAIN || 'iiit-bh.ac.in'
+    });
+    stdout.write(`Production demonstration initialized on empty database.\n${accounts.map(account => `${account.role}: ${account.email}`).join('\n')}\n`);
+    if (!process.env.DEMO_PASSWORD) {
+      stdout.write(`Generated demo password (save securely now; not stored in plaintext): ${accounts.password}\n`);
+    }
   } else if (command === 'admin') {
     const password = passwordSchema.parse(process.env.ADMIN_PASSWORD);
     const rl = createInterface({ input: stdin, output: stdout });
@@ -45,7 +58,7 @@ try {
     await backup(db, target);
     stdout.write(`Consistent SQLite backup created: ${target}\n`);
   } else {
-    throw new Error('Use migrate, seed, admin or backup');
+    throw new Error('Use migrate, seed, demo-init, admin or backup');
   }
 } catch (error) {
   process.stderr.write(`${error instanceof z.ZodError ? 'Invalid input. Set ADMIN_PASSWORD to a password with 12–128 characters, upper and lowercase letters, and a number; verify email and name.' : error instanceof Error ? error.message : 'Command failed'}\n`);

@@ -1,22 +1,29 @@
+import { randomBytes } from 'node:crypto';
 import type { Context, Role } from './types.js';
 import { all, audit, id, one, run, transaction } from './db.js';
-import { hashPassword } from './auth.js';
+import { hashPassword, passwordSchema } from './auth.js';
 import { addDays, iso, today } from './lib.js';
 import { bookMeal } from './services/bookings.js';
 import { issueInvoice } from './services/billing.js';
 
-export const demoPassword = 'MessDemo2026!';
-export async function seedDemo(ctx: Context) {
-  if (ctx.config.production || process.env.NODE_ENV === 'production') throw new Error('Demo seeding is disabled in production');
+export function generateDemoPassword() {
+  return `Mess-${randomBytes(9).toString('base64url')}9aA`;
+}
+export async function seedDemo(ctx: Context, options: { password?: string; allowProduction?: boolean; domain?: string } = {}) {
+  const inProd = ctx.config.production || process.env.NODE_ENV === 'production';
+  if (inProd && !options.allowProduction) throw new Error('Demo seeding is disabled in production');
   if (one(ctx.db, 'SELECT id FROM users LIMIT 1')) throw new Error('Demo seed requires an empty database; your existing data has been preserved');
-  const hash = await hashPassword(demoPassword);
-  return transaction(ctx.db, () => {
+  const rawPassword = options.password ?? process.env.DEMO_PASSWORD ?? generateDemoPassword();
+  const password = passwordSchema.parse(rawPassword);
+  const domain = options.domain ?? (inProd ? 'iiit-bh.ac.in' : 'demo.iiit-bh.ac.in');
+  const hash = await hashPassword(password);
+  const seeded = transaction(ctx.db, () => {
     const accounts: { name: string; email: string; role: Role; roll: string | null }[] = [
-      { name: 'Mess Administrator', email: 'admin@demo.iiit-bh.ac.in', role: 'ADMIN', roll: null },
-      { name: 'Ananya Das', email: 'manager@demo.iiit-bh.ac.in', role: 'MANAGER', roll: null },
-      { name: 'Prakash Sahoo', email: 'staff@demo.iiit-bh.ac.in', role: 'STAFF', roll: null },
-      { name: 'Aarav Mishra', email: 'student@demo.iiit-bh.ac.in', role: 'STUDENT', roll: 'B123001' },
-      { name: 'Priya Mohanty', email: 'priya@demo.iiit-bh.ac.in', role: 'STUDENT', roll: 'B123002' }
+      { name: 'Mess Administrator', email: `admin@${domain}`, role: 'ADMIN', roll: null },
+      { name: 'Ananya Das', email: `manager@${domain}`, role: 'MANAGER', roll: null },
+      { name: 'Prakash Sahoo', email: `staff@${domain}`, role: 'STAFF', roll: null },
+      { name: 'Aarav Mishra', email: `student@${domain}`, role: 'STUDENT', roll: 'B123001' },
+      { name: 'Priya Mohanty', email: `priya@${domain}`, role: 'STUDENT', roll: 'B123002' }
     ];
     const users = accounts.map(account => {
       const userId = id();
@@ -24,6 +31,10 @@ export async function seedDemo(ctx: Context) {
       return { ...account, id: userId };
     });
     const adminId = users[0]!.id;
+    const managerId = users[1]!.id;
+    const staffId = users[2]!.id;
+    const student1Id = users[3]!.id;
+    const student2Id = users[4]!.id;
     const menu = [
       { type: 'BREAKFAST', title: 'A bright start', items: ['Idli', 'Sambar', 'Coconut chutney', 'Tea'], start: '07:30', end: '09:00', price: 3500, allergens: ['Milk'] },
       { type: 'LUNCH', title: 'The Odia thali', items: ['Steamed rice', 'Dalma', 'Aloo bhaja', 'Seasonal salad', 'Curd'], start: '12:00', end: '14:00', price: 6000, allergens: ['Milk'] },
@@ -51,11 +62,20 @@ export async function seedDemo(ctx: Context) {
     const historicalStart = `${historicalDate}T06:30:00.000Z`;
     run(ctx.db, "INSERT INTO meal_services VALUES (?,?,?,?,?,?,'VEG',?,?,?,?,?,'PUBLISHED',?,?)", historicalMealId, historicalDate, 'LUNCH', 'Demo historical lunch', '["Rice","Dalma","Curd"]', '["Milk"]', 6000, 400, historicalStart, `${historicalDate}T08:30:00.000Z`, `${historicalDate}T03:30:00.000Z`, adminId, historicalStart);
     for (const student of users.filter(user => user.role === 'STUDENT')) {
-      run(ctx.db, "INSERT INTO bookings (id,user_id,meal_id,status,price_paise,created_at,attended_at,attended_by) VALUES (?,?,?,'ATTENDED',6000,?,?,?)", id(), student.id, historicalMealId, `${historicalDate}T02:00:00.000Z`, historicalStart, users[2]!.id);
+      const bId = id();
+      run(ctx.db, "INSERT INTO bookings (id,user_id,meal_id,status,price_paise,created_at,attended_at,attended_by) VALUES (?,?,?,'ATTENDED',6000,?,?,?)", bId, student.id, historicalMealId, `${historicalDate}T02:00:00.000Z`, historicalStart, staffId);
+      if (student.id === student1Id) {
+        run(ctx.db, 'INSERT INTO feedback VALUES (?,?,5,5,4,?,?)', id(), bId, 'Freshly steamed rice and flavorful dalma!', historicalStart);
+      }
       issueInvoice(ctx, student.id, billingMonth, addDays(today(ctx), 7), adminId);
     }
+    const leaveId = id();
+    run(ctx.db, "INSERT INTO leave_requests (id,user_id,starts_on,ends_on,reason,status,created_at) VALUES (?,?,?,?,?,'PENDING',?)", leaveId, student2Id, addDays(today(ctx), 3), addDays(today(ctx), 5), 'Attending inter-IIIT robotics symposium in Hyderabad', iso(ctx));
+    const complaintId = id();
+    run(ctx.db, "INSERT INTO complaints VALUES (?,?,'SERVICE',?,?,'IN_PROGRESS',?,?,?)", complaintId, student1Id, 'Evening snacks counter queue', 'Could we open a second serving line during peak 4:30 PM snack hours?', managerId, iso(ctx), iso(ctx));
+    run(ctx.db, 'INSERT INTO complaint_replies VALUES (?,?,?,?,?)', id(), complaintId, managerId, 'Thanks for flagging this, Aarav. We are arranging an additional tea and snack counter starting tomorrow.', iso(ctx));
     const supplierId = id();
-    run(ctx.db, 'INSERT INTO suppliers VALUES (?,?,?,?)', supplierId, 'Campus Provisions', 'Demo supplier; replace before real use', iso(ctx));
+    run(ctx.db, 'INSERT INTO suppliers VALUES (?,?,?,?)', supplierId, 'Campus Provisions', 'Gothapatna Institutional Supply · +91 674 265 3300', iso(ctx));
     for (const item of [{ name: 'Rice', unit: 'GRAM', stock: 150000, threshold: 25000, cost: 720000 }, { name: 'Toor dal', unit: 'GRAM', stock: 8000, threshold: 10000, cost: 120000 }, { name: 'Cooking oil', unit: 'MILLILITRE', stock: 20000, threshold: 5000, cost: 300000 }]) {
       const itemId = id();
       run(ctx.db, 'INSERT INTO inventory_items VALUES (?,?,?,?,?,?)', itemId, item.name, item.unit, item.stock, item.threshold, iso(ctx));
@@ -65,4 +85,6 @@ export async function seedDemo(ctx: Context) {
     audit(ctx.db, adminId, 'DEMO_SEEDED', 'SYSTEM', 'demo', { users: users.length, meals: all(ctx.db, 'SELECT id FROM meal_services').length }, iso(ctx));
     return accounts.map(({ email, role }) => ({ email, role }));
   });
+  Object.defineProperty(seeded, 'password', { value: password, enumerable: false });
+  return seeded as { email: string; role: Role }[] & { password?: string };
 }

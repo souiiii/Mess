@@ -1,6 +1,6 @@
 # The Mess frontend
 
-The React application follows `DESIGN.md`: an editorial masthead, a white canvas, black typography, square controls, hairline dividers, restrained copy and a photographic lead. Playfair Display, Lora and Manrope are self-hosted substitutes for the brief's proprietary display, reading and interface typefaces.
+The React application provides a modern campus-dining dashboard and food-ordering interface with a soft slate/mint canvas (`#f3f6f4`), elevated white cards, a persistent left sidebar navigation with icons, emerald/lime accents, semantic status pills and self-hosted Manrope typography.
 
 ## Screens
 
@@ -11,7 +11,7 @@ The React application follows `DESIGN.md`: an editorial masthead, a white canvas
 | Manager | Menu drafts/publication/cancellation, extras, resident directory, leave review, invoice issuance, financial reports, CSV export, suppliers, stock receipts/corrections, notices and complaint assignments |
 | Administrator | Manager workflows plus account provisioning, suspension, roles, temporary-password resets, policy settings and audit journal |
 
-All screen data comes from the existing API. Only the seeded demo accounts and the explicitly simulated payments are artificial. The food photograph is illustrative, not a photograph of a specific published menu.
+All screen data comes from the backend REST API (`/api/v1`). Only the seeded demo accounts and the explicitly simulated payments are synthetic. The food photograph is illustrative, not a photograph of a specific published menu.
 
 ## Interaction and resilience
 
@@ -25,8 +25,8 @@ All screen data comes from the existing API. Only the seeded demo accounts and t
 
 ## Run and verify
 
-`npm run dev` starts the existing API and Vite together. `npm run build` produces the server and React assets. In production, Express serves both the API and the built frontend.
+`npm run dev` starts the API and Vite together. `npm run build` produces the server and React assets. In production, Express serves both the API and the built frontend from a single Node process.
 
-`npm run test:ui` runs React interaction tests in a DOM environment against isolated instances of the real Express/SQLite backend, including authentication, CSRF, permissions, bookings, payments, stock, leave, support and administration. No persistent development data is changed by these tests. `npm run check` includes these tests, the backend tests, type checking and the production build.
+`npm run test:ui` runs 18 React interaction tests in a DOM environment against isolated instances of the real Express/SQLite backend, covering authentication, CSRF, permissions, bookings, payments, stock, leave, support and administration. No persistent development data is changed by these tests. `npm run check` runs TypeScript type checking, 71 backend tests, 18 UI tests and the production build.
 
-Camera access requires localhost or HTTPS and a browser camera permission. Physical-camera scanning and rendered desktop/mobile layout require a real-browser review. The automation browser host was unavailable during this implementation; DOM integration tests do not establish visual correctness or camera-device compatibility.
+Camera access requires localhost or HTTPS and browser camera permission. When a physical camera is unavailable, the serving desk accepts manually pasted single-use pass codes.

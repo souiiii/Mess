@@ -94,5 +94,12 @@ test('demo seed is transactional, refuses an occupied database and is forbidden 
     assert.equal(one(db, 'SELECT count(*) AS n FROM stock_movements')!.n, 3);
     await assert.rejects(() => seedDemo(ctx), /empty database/);
     await assert.rejects(() => seedDemo({ ...ctx, config: { ...ctx.config, production: true } }), /disabled in production/);
+    const prodDb = openDatabase(':memory:');
+    try {
+      const prodAccounts = await seedDemo({ ...ctx, db: prodDb, config: { ...ctx.config, production: true } }, { allowProduction: true, domain: 'iiit-bh.ac.in' });
+      assert.equal(prodAccounts.length, 5);
+      assert.ok(prodAccounts.every(a => a.email.endsWith('@iiit-bh.ac.in')));
+      assert.ok(prodAccounts.password && prodAccounts.password.length >= 12);
+    } finally { prodDb.close(); }
   } finally { db.close(); f.close(); }
 });

@@ -13,16 +13,13 @@ export function AuthPage() {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  async function login(event?: FormEvent, demo?: string) {
-    event?.preventDefault();
+  async function login(event: FormEvent) {
+    event.preventDefault();
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await signIn(
-        demo ? `${demo}@demo.iiit-bh.ac.in` : email,
-        demo ? "MessDemo2026!" : password,
-      );
+      await signIn(email, password);
       navigate("/app");
     } catch (err) {
       setError(err);
@@ -129,11 +126,12 @@ export function AuthPage() {
           </p>
           {import.meta.env.DEV && (
             <div className="demo-access">
-              <span className="eyebrow">EXPLORE THE DEMO</span>
+              <span className="eyebrow">QUICK ROLE SELECT</span>
               <div>
                 {["student", "staff", "manager", "admin"].map((role) => (
                   <button
-                    onClick={() => login(undefined, role)}
+                    type="button"
+                    onClick={() => setEmail(`${role}@demo.iiit-bh.ac.in`)}
                     disabled={busy}
                     key={role}
                   >
@@ -142,7 +140,7 @@ export function AuthPage() {
                   </button>
                 ))}
               </div>
-              <small>Sample accounts · simulated payments</small>
+              <small>Fills demo email · enter your seeded password</small>
             </div>
           )}
           <div className="auth-date">

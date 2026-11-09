@@ -1,12 +1,12 @@
 # IIIT Bhubaneswar Mess Management System
 
-A full-stack mess management application with a complete React interface for students, kitchen staff, managers and administrators. Its editorial design follows `DESIGN.md`, with self-hosted typography, a monochrome visual system and responsive layouts.
+A full-stack campus mess management web application built with React, TypeScript, Express 5 and SQLite (`node:sqlite`). In production, a single Node.js/Express process serves both the compiled React frontend and the `/api/v1` REST API.
 
-Payments default to **FAKE**. Successful and failed payments can be simulated without a gateway, credentials or real money. Fake collections are identified separately in reports.
+Payments default to **FAKE** (`PAYMENTS_MODE=FAKE`), allowing students and evaluators to simulate successful and declined invoice payments safely without an external gateway or real money. Simulated collections are tracked and reported separately from verified payments.
 
 ## Run locally
 
-Use Node.js 22.16 or newer. Node 22 may print an experimental warning for its built-in SQLite driver.
+Requires Node.js 22.16 or newer.
 
 ```sh
 npm ci
@@ -15,7 +15,9 @@ npm run db:seed
 npm run dev
 ```
 
-After the initial installation and optional seed, **`npm run dev` starts both the API and React with one command**. Stopping it stops both processes. Development reloads both server and client changes.
+`npm run db:seed` populates an empty development database (`data/mess.sqlite`) with synthetic accounts, 7-day menus, reservations, feedback, a pending leave request, an active complaint thread, pantry inventory, a low-stock alert and previous-month unpaid invoices. Unless `DEMO_PASSWORD` is provided in the environment, `db:seed` generates a strong random password and prints it once to the terminal.
+
+`npm run dev` starts both the Express API and Vite in a single command:
 
 | Service | URL |
 | --- | --- |
@@ -24,118 +26,80 @@ After the initial installation and optional seed, **`npm run dev` starts both th
 | OpenAPI 3.1 specification | http://localhost:5173/api/openapi.json |
 | API health | http://localhost:4000/api/health |
 
-The Vite proxy keeps browser requests on one origin. There is no separate database service to start. Migrations run automatically and SQLite persists in `data/mess.sqlite`.
+## Core capabilities by role
 
-### Demo accounts
-
-All demo accounts use **`MessDemo2026!`**. These are synthetic accounts, not institute accounts.
-
-| Role | Email |
+| Role | Workflows |
 | --- | --- |
-| Administrator | admin@demo.iiit-bh.ac.in |
-| Mess manager | manager@demo.iiit-bh.ac.in |
-| Serving/kitchen staff | staff@demo.iiit-bh.ac.in |
-| Student | student@demo.iiit-bh.ac.in |
-| Second student | priya@demo.iiit-bh.ac.in |
+| **Student** | Personalized dashboard, daily/weekly menu browsing with dietary filters, single & full-day meal booking, extras ordering, booking cancellation before cutoff, expiring QR & pass-code generation, meal ratings, leave requests & withdrawals, itemized monthly statements, simulated payment checkout (`SUCCESS`/`FAILURE`), private complaint threads & campus notices |
+| **Staff** | Operations overview, serving desk with live camera QR scanning and manual pass-code check-in, service attendance roster, kitchen stock consumption/waste logging, completed-service food waste recording & non-billing complaint replies |
+| **Manager** | Operational dashboard with attendance rate & low-stock alerts, draft menu creation/editing/publishing, service cancellation, extra item offers, resident directory, leave approval/rejection (with atomic booking cancellation), monthly invoice issuance, CSV billing export, operational & financial reports, supplier directory & stock receipts/adjustments |
+| **Administrator** | All manager workflows plus user account provisioning (`STUDENT`, `STAFF`, `MANAGER`, `ADMIN`), role & suspension management, temporary password resets, mess policy configuration (booking horizon, minimum leave days, feedback window) and append-only audit journal |
 
-The seed creates upcoming menus, bookings, stock, a low-stock alert, a notice, and an unpaid invoice from the previous month for each student. The dates are relative to the day the seed runs. Seeding requires an empty database and never deletes existing data. It is disabled in production; production startup also rejects databases containing demo accounts.
+## Production deployment (Ubuntu VPS with Docker)
 
-To use a fresh database alongside the demo database, change `DATABASE_PATH`. Do not delete a database containing records you need.
+The application is designed to run on an Ubuntu VPS inside Docker without disrupting other running containers or host services:
 
-See [the frontend guide](docs/FRONTEND.md) for screens, interactions and UI verification, and [asset notes](docs/ASSETS.md) for the generated photograph and typography. Development sign-in includes demo shortcuts; production excludes them.
+- The container binds only to loopback (`127.0.0.1:4000:4000` by default, configurable via `HOST_PORT`), leaving public ports `80`/`443` untouched for the host's existing reverse proxy.
+- SQLite data and backups persist across container restarts and image upgrades in named Docker volumes (`iiit-mess-data` mounted at `/app/data` and `iiit-mess-backups` mounted at `/app/backups`).
+- A built-in Docker health check probes `http://127.0.0.1:4000/api/health` and `restart: unless-stopped` ensures automatic recovery after host reboots.
 
-## What the application handles
+### 1. Verify the VPS host environment
 
-| Area | Implemented behavior |
-| --- | --- |
-| Accounts | Admin-provisioned accounts, temporary passwords, forced password changes, suspension, role changes, session revocation, dietary preferences and allergies |
-| Menus | Date-specific breakfast/lunch/snacks/dinner services, draft publication, locked published menus, prices, allergens, capacity, service windows and cutoffs |
-| Bookings | Capacity checks inside write transactions, idempotent booking, atomic multi-meal booking, cancellations, rebooking and leave checks |
-| Extras | Per-meal quantities, stock reservation, price snapshots, cancellations and fulfilment at attendance |
-| Attendance | Random meal passes, 120-second expiry, pass rotation, single-use redemption by staff and service-window checks |
-| Leave | Pending/approved/rejected/withdrawn states, overlap detection, configurable minimum duration, atomic booking and extra cancellation |
-| Billing | Live monthly previews, immutable closed-month invoices, itemised lines, bulk issuance, partial settlement, due dates, overdue balances and CSV export |
-| Fake payments | Student-owned success/failure simulation, persistent attempts, idempotent replay, overpayment prevention and clearly marked fake ledger entries |
-| Inventory | Suppliers, grams/millilitres/pieces, receipts, consumption, waste, corrections, low-stock thresholds and append-only stock history |
-| Food waste | Prepared and leftover portions, measured waste, attendance consistency checks and one record per completed service |
-| Support | Private complaint conversations, assignments, resolution/reopening, attendance-backed feedback and expiring announcements |
-| Management | Role-aware dashboards, dietary headcounts, extras demand, no-shows, ratings, procurement costs and append-only audit history |
-
-### Proposed project policies
-
-These are project assumptions, **not verified IIIT Bhubaneswar policies**. Confirm them with the mess administration before using the system operationally.
-
-1. This version bills **booked meals**, rather than a flat subscription. Students explicitly reserve meals, individually or in a batch. Confirmed no-shows remain billable because the kitchen has already planned for them.
-2. Prices are stored in integer INR paise and locked at booking/order time. Published meal pricing, times and menus cannot be edited silently.
-3. Booking and cancellation close at the meal's cutoff. The default seed uses a cutoff three hours before service; managers choose each real service's cutoff.
-4. Students can book up to 14 days ahead by default. Administrators can change this to 1–60 days.
-5. Leave starts after today, covers at least two days by default, and requires approval. Pending leave blocks new bookings. Approval cancels eligible bookings and extras; it does not invent a credit for meals that were never booked. Approval fails atomically if any affected cancellation cutoff has passed.
-6. Future leave can be withdrawn. Previously cancelled meals are rebooked explicitly, subject to the usual capacity and cutoff rules.
-7. Invoices can be finalised only after the month ends. Cancellations and approved leave have already removed their charges. Issued invoices and recorded payments cannot be edited or deleted through the API.
-8. Attendance is allowed only during the published service window. Passes can be generated from 15 minutes before service; each new pass invalidates the previous one.
-9. All calendar dates use Asia/Kolkata independently of the machine timezone. API timestamps are normalised to UTC.
-
-## Fake payment workflow
-
-`PAYMENTS_MODE=FAKE` is the default in development and production for this project. It makes no external payment requests.
-
-1. Sign in as a seeded student.
-2. Get their previous-month invoice with `GET /api/v1/invoices`.
-3. Call `POST /api/v1/invoices/{id}/fake-payment` with `amountPaise`, `outcome` (`SUCCESS` or `FAILURE`), and a unique `idempotencyKey` of 16–100 letters, digits, hyphens or underscores.
-4. `SUCCESS` records a payment with method `FAKE`. `FAILURE` records an attempt and leaves the balance unchanged. Both return `simulated: true` and `moneyMoved: false`.
-5. Retry the exact same request with the same key to safely retrieve the same attempt. Use a new key for a new attempt. Reusing a key with different values is rejected.
-
-For a full ₹60 seeded invoice, `amountPaise` is `6000`. Failed attempts can be followed by a successful attempt with a new key.
-
-The optional `MANUAL` mode enables management to record independently verified cash/bank/UPI receipts and disables student fake payments. It is not a gateway integration. Keep the default `FAKE` for the current project phase.
-
-## API development
-
-The [API guide](docs/API.md) includes authentication, endpoint groups, response shapes, and common workflows. The live `/api/docs` explorer runs from local assets and has no CDN dependency.
-
-Successful responses use `{ "data": ... }`. Errors use `{ "error": { "code", "message", "requestId", "details"? } }`. Lists generally use `{ "items", "total", "page", "limit" }` inside `data`. Menus and bounded operation reports return arrays or grouped records.
-
-Session tokens are held in HttpOnly cookies, not browser storage. After login or `GET /auth/me`, send the returned `csrfToken` in `X-CSRF-Token` for authenticated mutations. User creation and password reset return accounts requiring an initial password change.
-
-## Production
+Before deploying on the Ubuntu VPS, inspect the host environment to confirm the Ubuntu release, Docker version, and occupied ports:
 
 ```sh
-npm ci
-npm run build
+lsb_release -a || cat /etc/os-release
+docker --version && docker compose version
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}"
+ss -tulpn | grep -E ':(80|443|4000)\b' || true
 ```
 
-Set these in the deployment environment or an untracked `.env`:
+If `127.0.0.1:4000` is already used by another local service on the VPS, set a different `HOST_PORT` (for example `HOST_PORT=4010`) in `.env` and update your reverse proxy upstream accordingly.
 
-```dotenv
-NODE_ENV=production
-APP_ORIGIN=https://mess.example.edu
-PORT=4000
-DATABASE_PATH=./data/production.sqlite
-PAYMENTS_MODE=FAKE
-TRUST_PROXY=1
-```
-
-Use the actual public HTTPS origin. Set `TRUST_PROXY=1` only when there is exactly one trusted reverse proxy. The application requires HTTPS for its production origin and uses secure session cookies.
-
-Bootstrap the first administrator against a fresh production database. Set `ADMIN_EMAIL`, `ADMIN_NAME` and `ADMIN_PASSWORD` as environment variables; the password must have 12–128 characters, uppercase and lowercase letters, and a number. Keep these values out of source control and command history. Then run:
+### 2. Configure environment and start the container
 
 ```sh
-npm run admin:create
-npm start
+cp .env.production.example .env
+# Edit .env and set APP_ORIGIN=https://<your-domain>
+docker compose up -d --build
 ```
 
-**In production, one Express process serves both `/api/*` and the compiled React assets.** SPA navigation falls back to React; unknown API routes and missing assets stay 404. Hashed client assets receive long-lived immutable caching; API responses use `no-store`.
+### 3. Initialize synthetic production-demo data (or bootstrap an admin)
 
-Use a TLS reverse proxy and a persistent local volume for the database. This deployment is intended for a single application instance. Do not share a SQLite file across machines or use an ephemeral serverless filesystem. [Architecture and operations](docs/ARCHITECTURE.md) covers this tradeoff and migration boundaries.
+Production startup blocks development `@demo.iiit-bh.ac.in` accounts (`server/src/app.ts`) and requires an explicit initialization step on an empty database.
 
-### Container option
+To initialize a **complete production demonstration** with synthetic accounts (`admin@iiit-bh.ac.in`, `manager@iiit-bh.ac.in`, `staff@iiit-bh.ac.in`, `student@iiit-bh.ac.in`, `priya@iiit-bh.ac.in`), menus, bookings, stock, leave, complaints and unpaid invoices without hardcoded credentials:
 
 ```sh
-docker build -t iiit-mess .
-docker run --name iiit-mess -p 4000:4000 -e APP_ORIGIN=https://mess.example.edu -e TRUST_PROXY=1 -v mess-data:/app/data -v mess-backups:/app/backups iiit-mess
+docker compose exec iiit-mess node dist/server/cli.js demo-init
 ```
 
-The container runs as a non-root user. For first-admin bootstrap inside the container, inject `ADMIN_EMAIL`, `ADMIN_NAME` and `ADMIN_PASSWORD` through your deployment's secret mechanism, then execute `node dist/server/cli.js admin`. The final image does not need TypeScript or Vite.
+- `demo-init` refuses to run if the database already contains any users, protecting existing data.
+- If `DEMO_PASSWORD` is not passed in the environment, `demo-init` generates a cryptographically random password meeting all complexity rules and prints it once to stdout for secure handoff.
+
+Alternatively, to start with a blank production database and create only the first administrator:
+
+```sh
+docker compose exec \
+  -e ADMIN_EMAIL=admin@iiit-bh.ac.in \
+  -e ADMIN_NAME="Mess Administrator" \
+  -e ADMIN_PASSWORD="<strong-password>" \
+  iiit-mess node dist/server/cli.js admin
+```
+
+### 4. Reverse proxy (HTTPS)
+
+Terminate TLS at your host reverse proxy and forward traffic to `127.0.0.1:4000` with `TRUST_PROXY=1`. Ready-to-use snippets are provided in:
+
+- [`deploy/Caddyfile`](deploy/Caddyfile) (Caddy)
+- [`deploy/nginx.conf`](deploy/nginx.conf) (Nginx)
+
+## 10-minute demonstration script
+
+1. **Student workflow (3.5 min)** — Sign in as `student@<domain>`. Review the personalized dashboard (this month's provisional bill, upcoming bookings, outstanding balance, and noticeboard). Open **The menu**, filter by dietary type, and click **Save my seat** on an upcoming service. Open **My bookings** to view the reservation, add an extra item, or generate a 120-second single-use QR/pass code. Visit **Statements**, open the previous month's invoice, and run a simulated **Declined payment** followed by a **Successful payment** (`DEMO CHECKOUT`). Submit a request under **Time away** and open a thread under **Noticeboard -> My conversations**.
+2. **Staff workflow (1.5 min)** — Sign in as `staff@<domain>`. Open **Serving desk**, paste a student's active meal pass code (or scan via camera) to redeem attendance, and inspect the service roster.
+3. **Manager workflow (3 min)** — Sign in as `manager@<domain>`. Review the **Overview** attendance gauge, service schedule, and pantry low-stock alerts. Create and **Publish** a new menu service in **The menu**. Approve the student's pending leave request in **Leave**. Reply to and update the student's complaint in **Community -> Conversations**. Record a stock delivery in **The kitchen -> The pantry** and inspect **Reports** (daily attendance chart, financial breakdown, and CSV export).
+4. **Administrator workflow (2 min)** — Sign in as `admin@<domain>`. Open **People** to provision a new account with a temporary password or manage role/suspension status. Open **Mess settings** (top-right gear icon) to adjust booking/leave policies and inspect the append-only **Activity journal**.
 
 ## Verification and maintenance
 
@@ -145,24 +109,4 @@ npm run db:migrate
 npm run db:backup
 ```
 
-`check` runs strict TypeScript checking, 71 backend tests, 18 React/API integration tests and the production build. Tests use isolated databases and an injected clock; they do not depend on the seeded database or the current date. CI runs the same checks on pushes and pull requests.
-
-The backup command uses SQLite's online backup API rather than copying a live WAL database. Backups are written to `backups/`. For a restore, stop the application, choose a new database path, place the backup there, and point `DATABASE_PATH` at it. Do not overwrite a database while the application is running. The integration suite verifies backup integrity and restored records.
-
-## Project layout
-
-```text
-client/                 Complete React application, UI integration tests and Vite proxy
-server/src/app.ts       HTTP application and middleware
-server/src/api.ts       Route registration and generated OpenAPI
-server/src/auth.ts      Passwords, sessions and CSRF integration
-server/src/migrations.ts Versioned database schema
-server/src/routes/      Validated feature APIs and permissions
-server/src/services/    Booking and billing rules
-server/src/seed.ts      Explicit development-only sample data
-server/src/cli.ts       Migration, bootstrap, seed and backup commands
-server/test/            HTTP integration and persistence tests
-docs/                   API contracts, policies and architecture
-```
-
-The frontend includes QR rendering, camera scanning and manual-code check-in. Payments remain simulated as requested. Institute SSO, real payment gateways and outbound email are future integrations. No source-code comments are used.
+`npm run check` runs TypeScript type checking (`tsc --noEmit`), 71 backend integration & persistence tests, 18 React UI workflow tests against real Express/SQLite instances, and the production build.
