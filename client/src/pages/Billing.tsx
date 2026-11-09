@@ -77,7 +77,7 @@ export default function BillingPage() {
           <Load query={preview}>
             <div className="billing-cover">
               <div className="billing-cover-main">
-                <span className="eyebrow">UNPAID INVOICES</span>
+                <span className="eyebrow">OUTSTANDING BALANCE</span>
                 <strong>{money(dash.data?.outstandingPaise)}</strong>
                 <span>
                   {dash.data?.paymentsMode === "FAKE"
@@ -95,7 +95,7 @@ export default function BillingPage() {
                   in the making.
                 </h2>
                 <div className="statement-preview">
-                  <span>Current month's estimated bill</span>
+                  <span>Booked meals & extras</span>
                   <strong>{money(preview.data?.totalPaise)}</strong>
                 </div>
                 <p className="small muted">
