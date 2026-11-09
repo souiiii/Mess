@@ -125,6 +125,8 @@ describe("React screens against the real Express API", () => {
       })
       .expect(201);
     await mount("/app/billing");
+    await screen.findByText("UNPAID INVOICES");
+    await screen.findByText("Current month’s estimated bill");
     await screen.findByRole("button", { name: "October 2026" });
     click("October 2026");
     await screen.findByRole("button", { name: "Pay ₹60" });

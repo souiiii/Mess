@@ -41,17 +41,29 @@ export async function seedDemo(ctx: Context, options: { password?: string; allow
       { type: 'SNACKS', title: 'An evening pause', items: ['Samosa', 'Green chutney', 'Tea'], start: '16:30', end: '17:30', price: 2000, allergens: ['Wheat', 'Milk'] },
       { type: 'DINNER', title: 'End the day well', items: ['Roti', 'Jeera rice', 'Dal tadka', 'Paneer curry'], start: '19:30', end: '21:00', price: 6500, allergens: ['Wheat', 'Milk'] }
     ];
-    for (let day = 0; day < 8; day++) {
+    for (let day = -1; day < 8; day++) {
       const date = addDays(today(ctx), day);
       for (const template of menu) {
         const starts = new Date(`${date}T${template.start}:00+05:30`).toISOString();
         const ends = new Date(`${date}T${template.end}:00+05:30`).toISOString();
         const cutoff = new Date(Date.parse(starts) - 3 * 3600000).toISOString();
-        if (cutoff <= iso(ctx)) continue;
         const mealId = id();
-        run(ctx.db, "INSERT INTO meal_services VALUES (?,?,?,?,?,?,'VEG',?,?,?,?,?,'PUBLISHED',?,?)", mealId, date, template.type, template.title, JSON.stringify(template.items), JSON.stringify(template.allergens), template.price, 400, starts, ends, cutoff, adminId, iso(ctx));
+        const createdAt = day < 0 || cutoff <= iso(ctx) ? new Date(Date.parse(cutoff) - 86400000).toISOString() : iso(ctx);
+        run(ctx.db, "INSERT INTO meal_services VALUES (?,?,?,?,?,?,'VEG',?,?,?,?,?,'PUBLISHED',?,?)", mealId, date, template.type, template.title, JSON.stringify(template.items), JSON.stringify(template.allergens), template.price, 400, starts, ends, cutoff, adminId, createdAt);
         if (template.type === 'LUNCH') run(ctx.db, 'INSERT INTO extras VALUES (?,?,?,?,?,?)', id(), mealId, 'Extra curd', 1500, 80, '["Milk"]');
-        if (day === 1) for (const student of users.filter(user => user.role === 'STUDENT')) bookMeal(ctx, student.id, mealId);
+        if (cutoff <= iso(ctx)) {
+          if (day >= -1 && date.slice(0, 7) === today(ctx).slice(0, 7)) {
+            const attended = ends <= iso(ctx);
+            for (const student of users.filter(user => user.role === 'STUDENT')) {
+              run(ctx.db, 'INSERT INTO bookings (id,user_id,meal_id,status,price_paise,created_at,attended_at,attended_by) VALUES (?,?,?,?,?,?,?,?)', id(), student.id, mealId, attended ? 'ATTENDED' : 'CONFIRMED', template.price, createdAt, attended ? starts : null, attended ? staffId : null);
+            }
+            if (attended && day === -1 && template.type === 'LUNCH') {
+              run(ctx.db, 'INSERT INTO service_waste VALUES (?,?,?,?,?,?,?)', mealId, 2, 0, 120, 'Minimal plate waste during lunch service', staffId, ends);
+            }
+          }
+          continue;
+        }
+        if (day === 0 || day === 1) for (const student of users.filter(user => user.role === 'STUDENT')) bookMeal(ctx, student.id, mealId);
       }
     }
     const previousMonth = new Date(`${today(ctx).slice(0, 7)}-01T00:00:00Z`);

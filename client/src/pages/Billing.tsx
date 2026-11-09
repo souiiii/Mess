@@ -77,12 +77,12 @@ export default function BillingPage() {
           <Load query={preview}>
             <div className="billing-cover">
               <div className="billing-cover-main">
-                <span className="eyebrow">OUTSTANDING BALANCE</span>
+                <span className="eyebrow">UNPAID INVOICES</span>
                 <strong>{money(dash.data?.outstandingPaise)}</strong>
                 <span>
                   {dash.data?.paymentsMode === "FAKE"
-                    ? "Demo checkout · no real money moves"
-                    : "Settled through the mess office"}
+                    ? "Issued statements awaiting payment · demo checkout"
+                    : "Issued statements awaiting payment"}
                 </span>
               </div>
               <div>
@@ -95,11 +95,12 @@ export default function BillingPage() {
                   in the making.
                 </h2>
                 <div className="statement-preview">
-                  <span>Booked meals & extras</span>
+                  <span>Current month’s estimated bill</span>
                   <strong>{money(preview.data?.totalPaise)}</strong>
                 </div>
                 <p className="small muted">
-                  Your final statement arrives after the month closes.
+                  Updates with your current-month bookings. Finalized into an
+                  invoice after the month closes.
                 </p>
               </div>
             </div>
