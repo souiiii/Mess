@@ -116,9 +116,9 @@ export default function Overview() {
       <Load query={dashboard}>
         <section className="stats-strip">
           <Stat
-            label="THIS MONTH"
+            label="ESTIMATED THIS MONTH"
             value={money(dashboard.data?.provisionalBillPaise)}
-            note="Booked meals & extras"
+            note="Booked meals & extras · not invoiced yet"
           />
           <Stat
             label="UPCOMING MEALS"
@@ -126,12 +126,12 @@ export default function Overview() {
             note="Your seats at the table"
           />
           <Stat
-            label="TO SETTLE"
+            label="UNPAID INVOICES"
             value={money(dashboard.data?.outstandingPaise)}
             note={
               dashboard.data?.paymentsMode === "FAKE"
                 ? "Demo payment mode"
-                : "Outstanding invoices"
+                : "Issued invoices awaiting payment"
             }
           />
           <Link to="/app/bookings" className="stat stat-link">
