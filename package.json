@@ -19,10 +19,17 @@
     "db:seed": "node --import tsx server/src/cli.ts seed",
     "admin:create": "node --import tsx server/src/cli.ts admin",
     "db:backup": "node --import tsx server/src/cli.ts backup",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run test:ui && npm run build",
+    "test:ui": "vitest run --config client/vitest.config.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
+    "@fontsource/lora": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "@fontsource/playfair-display": "^5.3.0",
+    "@tanstack/react-query": "^5.107.1",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "cookie-parser": "^1.4.7",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
@@ -31,12 +38,16 @@
     "lucide-react": "^1.70.0",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
     "swagger-ui-dist": "^5.34.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",
@@ -45,9 +56,12 @@
     "@types/supertest": "^7.2.1",
     "@vitejs/plugin-react": "^6.2.1",
     "concurrently": "^10.0.7",
+    "jsdom": "^31.0.0",
+    "prettier": "^3.9.10",
     "supertest": "^7.3.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   }
 }

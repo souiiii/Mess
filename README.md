@@ -1,6 +1,6 @@
 # IIIT Bhubaneswar Mess Management System
 
-A backend-first, full-stack mess management project with a React verification workspace. The backend is implemented; the complete student, kitchen and administration UI is the next phase.
+A full-stack mess management application with a complete React interface for students, kitchen staff, managers and administrators. Its editorial design follows `DESIGN.md`, with self-hosted typography, a monochrome visual system and responsive layouts.
 
 Payments default to **FAKE**. Successful and failed payments can be simulated without a gateway, credentials or real money. Fake collections are identified separately in reports.
 
@@ -19,7 +19,7 @@ After the initial installation and optional seed, **`npm run dev` starts both th
 
 | Service | URL |
 | --- | --- |
-| React workspace | http://localhost:5173 |
+| Web application | http://localhost:5173 |
 | Interactive API explorer | http://localhost:5173/api/docs |
 | OpenAPI 3.1 specification | http://localhost:5173/api/openapi.json |
 | API health | http://localhost:4000/api/health |
@@ -42,7 +42,9 @@ The seed creates upcoming menus, bookings, stock, a low-stock alert, a notice, a
 
 To use a fresh database alongside the demo database, change `DATABASE_PATH`. Do not delete a database containing records you need.
 
-## What the backend handles
+See [the frontend guide](docs/FRONTEND.md) for screens, interactions and UI verification, and [asset notes](docs/ASSETS.md) for the generated photograph and typography. Development sign-in includes demo shortcuts; production excludes them.
+
+## What the application handles
 
 | Area | Implemented behavior |
 | --- | --- |
@@ -143,14 +145,14 @@ npm run db:migrate
 npm run db:backup
 ```
 
-`check` runs strict TypeScript checking, the integration suite and the production build. Tests use isolated databases and an injected clock; they do not depend on the seeded database or the current date. CI runs the same checks on pushes and pull requests.
+`check` runs strict TypeScript checking, 71 backend tests, 18 React/API integration tests and the production build. Tests use isolated databases and an injected clock; they do not depend on the seeded database or the current date. CI runs the same checks on pushes and pull requests.
 
 The backup command uses SQLite's online backup API rather than copying a live WAL database. Backups are written to `backups/`. For a restore, stop the application, choose a new database path, place the backup there, and point `DATABASE_PATH` at it. Do not overwrite a database while the application is running. The integration suite verifies backup integrity and restored records.
 
 ## Project layout
 
 ```text
-client/                 React verification workspace and Vite proxy
+client/                 Complete React application, UI integration tests and Vite proxy
 server/src/app.ts       HTTP application and middleware
 server/src/api.ts       Route registration and generated OpenAPI
 server/src/auth.ts      Passwords, sessions and CSRF integration
@@ -163,4 +165,4 @@ server/test/            HTTP integration and persistence tests
 docs/                   API contracts, policies and architecture
 ```
 
-The full UI, QR rendering/scanning interface, real payment integration, institute SSO and outbound email are not included in this backend phase. No source-code comments are used.
+The frontend includes QR rendering, camera scanning and manual-code check-in. Payments remain simulated as requested. Institute SSO, real payment gateways and outbound email are future integrations. No source-code comments are used.
